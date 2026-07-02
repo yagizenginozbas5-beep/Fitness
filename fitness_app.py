@@ -279,13 +279,25 @@ elif choice == "🥗 Yemek & Otomatik Makro":
                     {{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "summary": "Kısa yemek adı veya özeti"}}
                     """
                     response = model.generate_content(macro_prompt)
+                    # Yapay zekadan gelen cevabı tırnak hatası yapmadan temizleyen güvenli blok
+                    raw_text = response.text.strip()
                     
-                    clean_text = response.text.strip()
-                    if clean_text.startswith("```"):
-                        clean_text = clean_text.split("\n", 1)[1]
+                    # Eğer başında ```json veya sadece ``` varsa temizle
+                    if raw_text.startswith("```json"):
+                        clean_text = raw_text.split("```json", 1)[1]
+                    elif raw_text.startswith("```"):
+                        clean_text = raw_text.split("```", 1)[1]
+                    else:
+                        clean_text = raw_text
+                    
+                    # Eğer sonunda ``` varsa temizle
                     if clean_text.endswith("```"):
-                        clean_text = clean_text.rsplit("\n", 1)[0]
+                        clean_text = clean_text.rsplit("```", 1)[0]
+                    
                     clean_text = clean_text.strip()
+                    
+                    # Artık tertemiz olan metni JSON olarak yükle
+                    data = json.loads(clean_text)
                     
                     data = json.loads(clean_text)
                     
