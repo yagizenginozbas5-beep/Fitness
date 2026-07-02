@@ -276,9 +276,12 @@ elif choice == "🥗 Yemek & Otomatik Makro":
                     macro_prompt = f"Kullanıcı şunu yedi: '{user_food_input}'. Sadece JSON formatında: {{'calories': 0.0, 'protein': 0.0, 'carbs': 0.0, 'fat': 0.0, 'summary': 'ozet'}}"
                     response = model.generate_content(macro_prompt)
                     
-                    # HATASIZ PARÇALAMA
-                    raw_text = response.text.replace("```json", "").replace("```", "").strip()
-                    data = json.loads(raw_text)
+                    # Bu bloğu 260. satır civarındaki eski kodunla değiştir
+clean_text = response.text.strip()
+if "```" in clean_text:
+    # Metni kod bloklarından temizle
+    clean_text = clean_text.split("```")[1].replace("json", "").strip()
+data = json.loads(clean_text)
                     
                     conn = sqlite3.connect('fitness_tracker.db')
                     cursor = conn.cursor()
