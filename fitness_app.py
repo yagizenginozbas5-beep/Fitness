@@ -27,9 +27,9 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT, message TEXT
         )
     ''')
-    # Supplement tablosunu adet/gramaj tutacak şekilde güncelliyoruz
+    # Tablo ismini v2 yaparak eski çakışmayı kökten çözüyoruz kanka
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS supplements (
+        CREATE TABLE IF NOT EXISTS supplements_v2 (
             id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, supp_name TEXT, amount TEXT, taken INTEGER
         )
     ''')
@@ -65,8 +65,8 @@ cursor.execute("SELECT SUM(calories), SUM(protein), SUM(carbs), SUM(fat) FROM nu
 totals = cursor.fetchone()
 cursor.execute("SELECT exercise_name, sets FROM workouts WHERE date=?", (today,))
 today_workouts = cursor.fetchall()
-# Sadece alınan supplementleri ve miktarlarını çekiyoruz
-cursor.execute("SELECT supp_name, amount FROM supplements WHERE date=? AND taken=1", (today,))
+# Güncellenmiş tablo isminden veriyi çekiyoruz
+cursor.execute("SELECT supp_name, amount FROM supplements_v2 WHERE date=? AND taken=1", (today,))
 taken_supps = cursor.fetchall()
 conn.close()
 
@@ -183,12 +183,11 @@ elif choice == "🥗 Yemek & Makro Takibi":
         conn.close()
         st.success(f"{f_name} hafızaya alındı kanka!")
 
-# ==================== 4. SAYFA: SUPPLEMENTLER (GÜNCELLENEN KISIM) ====================
+# ==================== 4. SAYFA: SUPPLEMENTLER ====================
 elif choice == "💊 Supplement Günlüğü":
     st.header("💊 Gelişmiş Supplement Deposu")
     st.subheader("Bugün Vücuda Neler Girdi?")
     
-    # Doğru ve düzeltilmiş isim listesi
     supp_list = {
         "Creatine Monohydrate": "Örn: 5 gram veya 1 ölçek",
         "Whey Protein": "Örn: 30 gram veya 1 ölçek",
@@ -209,8 +208,7 @@ elif choice == "💊 Supplement Günlüğü":
         st.markdown(f"**🔹 {s_name}**")
         col1, col2 = st.columns([1, 3])
         
-        # Daha önce kaydedilmiş durumu çek
-        cursor.execute("SELECT taken, amount FROM supplements WHERE date=? AND supp_name=?", (today, s_name))
+        cursor.execute("SELECT taken, amount FROM supplements_v2 WHERE date=? AND supp_name=?", (today, s_name))
         row = cursor.fetchone()
         
         db_taken = row[0] if row else 0
@@ -221,15 +219,14 @@ elif choice == "💊 Supplement Günlüğü":
         
         new_taken = 1 if is_taken else 0
         
-        # Durumu güncelle veya ekle
         if row:
-            cursor.execute("UPDATE supplements SET taken=?, amount=? WHERE date=? AND supp_name=?", (new_taken, amount_input, today, s_name))
+            cursor.execute("UPDATE supplements_v2 SET taken=?, amount=? WHERE date=? AND supp_name=?", (new_taken, amount_input, today, s_name))
         else:
-            cursor.execute("INSERT INTO supplements (date, supp_name, amount, taken) VALUES (?, ?, ?, ?)", (today, s_name, amount_input, new_taken))
+            cursor.execute("INSERT INTO supplements_v2 (date, supp_name, amount, taken) VALUES (?, ?, ?, ?)", (today, s_name, amount_input, new_taken))
             
     conn.commit()
     conn.close()
-    st.success("Supplement deposu güncellendi kanka! Koçun ana sayfada hepsini gramı gramına okuyor.")
+    st.success("Supplement deposu güncellendi kanka!")
 
 # ==================== DİĞER SAYFALAR ====================
 elif choice == "🏋️‍♂️ PPL Antrenman Günlüğü":
