@@ -40,7 +40,8 @@ def init_db():
 init_db()
 
 # --- GEMINI API AYARI ---
-
+st.sidebar.title("🔑 Yapay Zeka Ayarı")
+api_key = st.sidebar.text_input("Gemini API Key Girin:", type="password")
 
 def get_gemini_model():
     # Streamlit Secrets'tan anahtarı otomatik çeker
@@ -48,7 +49,6 @@ def get_gemini_model():
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         return genai.GenerativeModel("gemini-2.5-flash")
     return None
-
 # --- ARAYÜZ BAŞLANGIÇ ---
 st.set_page_config(page_title="Gelişim Paneli", layout="wide")
 st.title("🚀 Kişisel Yapay Zeka Fitness Koçu")
