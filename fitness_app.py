@@ -45,8 +45,20 @@ def init_db():
 init_db()
 
 # --- GEMINI API AYARI ---
-st.sidebar.title("🔑 Yapay Zeka Ayarı")
-api_key = st.sidebar.text_input("Gemini API Key Girin:", type="password")
+# --- GEMINI API AYARI ---
+# Eğer Streamlit Secrets'a 'GEMINI_API_KEY' olarak eklediysen otomatik okur kanka
+if "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_API_KEY"]
+else:
+    # Eğer secrets'ta bulamazsa yedek olarak yine sol menüde kutu açar
+    st.sidebar.title("🔑 Yapay Zeka Ayarı")
+    api_key = st.sidebar.text_input("Gemini API Key Girin:", type="password")
+
+def get_gemini_model():
+    if not api_key:
+        return None
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel("gemini-2.5-flash")
 
 def get_gemini_model():
     if not api_key:
