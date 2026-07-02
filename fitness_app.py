@@ -3,7 +3,7 @@ import sqlite3
 import datetime
 import zoneinfo
 import google.generativeai as genai
-import json  # Makro dönüşümü için ekledik kanka
+import json
 
 # --- VERİTABANI AYARLARI ---
 def init_db():
@@ -155,7 +155,7 @@ if choice == "🔥 Koçun Günlük Raporu & Özet":
     else:
         with st.spinner("Koçun tüm verilerini ve zaman parametrelerini analiz ediyor..."):
             try:
-                prompt = "Mevcut saate ve verilere bakarak bana hiç lafı dolandırmadan; 'Zamanlama ve İdman Kontrolü', 'Yağ Oranı ve Projeksiyon Değerlendirmesi', 'Gözümden Kaçmayan Eksikler' başlıklarıyla net, sert ve matematiksel bir karne çıkar."
+                prompt = "Mevcut saate ve verilere bakarak bana hiç lafı dolandırmadan; 'Zamanlama ve İdman Kontrolü', 'Yağ Oranı ve Projeksiyon Değerlendirmesi', 'Gözümden Kaçmayan Eksikler' başlıklarıyla net, sert and matematiksel bir karne çıkar."
                 response = model.generate_content([system_context, prompt])
                 st.write(response.text)
             except Exception as e:
@@ -207,7 +207,7 @@ elif choice == "💬 Koçla Sohbet & Akıl Danışma":
             conn.close()
             st.rerun()
 
-# ==================== 3. SAYFA: BESLENME (YENİLENEN OTOMATİK SİSTEM) ====================
+# ==================== 3. SAYFA: BESLENME (HATA DÜZELTİLEN YER) ====================
 elif choice == "🥗 Yemek & Otomatik Makro":
     st.header("🥗 Bugün Ne Gömdün?")
     st.subheader("Makroları Sen Değil, Koç Hesaplasın")
@@ -225,7 +225,6 @@ elif choice == "🥗 Yemek & Otomatik Makro":
         else:
             with st.spinner("Yapay zeka besin değerlerini ve makroları çıkartıyor..."):
                 try:
-                    # Yapay zekaya sadece JSON vermesi için kesin talimat geçiyoruz
                     macro_prompt = f"""
                     Kullanıcı şunu yedi: "{user_food_input}"
                     Bu yemeğin/öğünün kalori ve makro değerlerini (karbonhidrat, protein, yağ) profesyonel bir fitness veritabanı hassasiyetinde tahmin et.
@@ -233,9 +232,14 @@ elif choice == "🥗 Yemek & Otomatik Makro":
                     {{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "summary": "Kısa yemek adı veya özeti"}}
                     """
                     response = model.generate_content(macro_prompt)
-                    clean_text = response.text.strip().replace("```json", "").replace("```", "")
+                    # Görseldeki tırnak hatasını bu temizleme mantığıyla kökten çözdük kanka:
+                    clean_text = response.text.strip()
+                    if clean_text.startswith("```"):
+                        clean_text = clean_text.split("\n", 1)[1]
+                    if clean_text.endswith("```"):
+                        clean_text = clean_text.rsplit("\n", 1)[0]
+                    clean_text = clean_text.strip()
                     
-                    # JSON verisini parse edip veritabanına atıyoruz
                     data = json.loads(clean_text)
                     
                     conn = sqlite3.connect('fitness_tracker.db')
@@ -310,7 +314,7 @@ elif choice == "🏋️‍♂️ PPL Antrenman Günlüğü":
     sets_input = st.text_input("Setler ve Tekrarlar (Örn: 4x12 60kg)")
     if st.button("Hareketi Veritabanına İşle"):
         conn = sqlite3.connect('fitness_tracker.db')
-        cursor = csv_cursor = conn.cursor()
+        cursor = conn.cursor()  # Çakışan hatalı cursor düzeltildi kanka
         cursor.execute("INSERT INTO workouts (date, routine_type, exercise_name, sets) VALUES (?, ?, ?, ?)", (today, ppl_type, ex_name, sets_input))
         conn.commit()
         conn.close()
