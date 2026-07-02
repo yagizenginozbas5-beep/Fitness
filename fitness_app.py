@@ -172,7 +172,24 @@ Senden Beklenen Sert ve Gerçekçi Koçluk Kuralları:
 """
 
 # ==================== 1. SAYFA: ÖZET & KOÇUN RAPORU ====================
+# 🔥 Koçun Günlük Raporu & Özet sayfası için:
 if choice == "🔥 Koçun Günlük Raporu & Özet":
+    # ... (metriklerin burada kalsın) ...
+
+    # ANALİZİ BUTONA BAĞLIYORUZ:
+    if st.button("Koçtan Yeni Analiz İste 🧠"):
+        model = get_gemini_model()
+        if model:
+            with st.spinner("Analiz ediliyor..."):
+                try:
+                    response = model.generate_content([system_context, prompt])
+                    st.session_state["rapor_hafiza"] = response.text
+                except Exception as e:
+                    st.error(f"Hata: {e}")
+    
+    # Raporu butona basınca hafızadan göster:
+    if "rapor_hafiza" in st.session_state:
+        st.write(st.session_state["rapor_hafiza"])
     st.header("📋 Gerçek Zamanlı Analiz Paneli")
     
     col1, col2, col3, col4 = st.columns(4)
