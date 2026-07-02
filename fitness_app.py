@@ -133,6 +133,7 @@ Senden Beklenen Sert ve Gerçekçi Koçluk Kuralları:
 """
 
 # ==================== 1. SAYFA: ÖZET & KOÇUN RAPORU ====================
+# ==================== 1. SAYFA: ÖZET & KOÇUN RAPORU ====================
 if choice == "🔥 Koçun Günlük Raporu & Özet":
     st.header("📋 Gerçek Zamanlı Analiz Paneli")
     
@@ -154,13 +155,15 @@ if choice == "🔥 Koçun Günlük Raporu & Özet":
     if not model:
         st.warning("Kanka koçunun rapor yazabilmesi için sol menüden Gemini API Key'ini girmen lazım.")
     else:
-        with st.spinner("Koçun tüm verilerini ve zaman parametrelerini analiz ediyor..."):
-            try:
-                prompt = "Mevcut saate ve verilere bakarak bana hiç lafı dolandırmadan; 'Zamanlama ve İdman Kontrolü', 'Yağ Oranı ve Projeksiyon Değerlendirmesi', 'Gözümden Kaçmayan Eksikler' başlıklarıyla net, sert and matematiksel bir karne çıkar."
-                response = model.generate_content([system_context, prompt])
-                st.write(response.text)
-            except Exception as e:
-                st.error(f"Hata: {e}")
+        # HER SEFERİNDE ÇALIŞMASIN DİYE BUTONA BAĞLADIK KANKA:
+        if st.button("🔄 Koçun Analizini Tetikle / Yenile"):
+            with st.spinner("Koçun tüm verilerini ve zaman parametrelerini analiz ediyor..."):
+                try:
+                    prompt = "Mevcut saate ve verilere bakarak bana hiç lafı dolandırmadan; 'Zamanlama ve İdman Kontrolü', 'Yağ Oranı ve Projeksiyon Değerlendirmesi', 'Gözümden Kaçmayan Eksikler' başlıklarıyla net, sert and matematiksel bir karne çıkar."
+                    response = model.generate_content([system_context, prompt])
+                    st.write(response.text)
+                except Exception as e:
+                    st.error(f"Hata: {e}")
 
 # ==================== 2. SAYFA: SOHBET ====================
 elif choice == "💬 Koçla Sohbet & Akıl Danışma":
