@@ -44,10 +44,11 @@ st.sidebar.title("🔑 Yapay Zeka Ayarı")
 api_key = st.sidebar.text_input("Gemini API Key Girin:", type="password")
 
 def get_gemini_model():
-    if not api_key:
-        return None
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel("gemini-2.5-flash")
+    # Streamlit Secrets'tan anahtarı otomatik çeker
+    if "GEMINI_API_KEY" in st.secrets:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        return genai.GenerativeModel("gemini-2.5-flash")
+    return None
 
 # --- ARAYÜZ BAŞLANGIÇ ---
 st.set_page_config(page_title="Gelişim Paneli", layout="wide")
