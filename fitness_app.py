@@ -3,7 +3,7 @@ import sqlite3
 import datetime
 import zoneinfo
 import google.generativeai as genai
-import json  # Makro dönüşümü için ekledik kanka
+import json
 
 # --- VERİTABANI AYARLARI ---
 def init_db():
@@ -155,7 +155,7 @@ if choice == "🔥 Koçun Günlük Raporu & Özet":
     else:
         with st.spinner("Koçun tüm verilerini ve zaman parametrelerini analiz ediyor..."):
             try:
-                prompt = "Mevcut saate ve verilere bakarak bana hiç lafı dolandırmadan; 'Zamanlama ve İdman Kontrolü', 'Yağ Oranı ve Projeksiyon Değerlendirmesi', 'Gözümden Kaçmayan Eksikler' başlıklarıyla net, sert ve matematiksel bir karne çıkar."
+                prompt = "Mevcut saate ve verilere bakarak bana hiç lafı dolandırmadan; 'Zamanlama ve İdman Kontrolü', 'Yağ Oranı ve Projeksiyon Değerlendirmesi', 'Gözümden Kaçmayan Eksikler' başlıklarıyla net, sert and matematiksel bir karne çıkar."
                 response = model.generate_content([system_context, prompt])
                 st.write(response.text)
             except Exception as e:
@@ -207,7 +207,7 @@ elif choice == "💬 Koçla Sohbet & Akıl Danışma":
             conn.close()
             st.rerun()
 
-# ==================== 3. SAYFA: BESLENME (YENİLENEN OTOMATİK SİSTEM) ====================
+# ==================== 3. SAYFA: BESLENME (HATA DÜZELTİLEN YER) ====================
 elif choice == "🥗 Yemek & Otomatik Makro":
     st.header("🥗 Bugün Ne Gömdün?")
     st.subheader("Makroları Sen Değil, Koç Hesaplasın")
@@ -225,7 +225,6 @@ elif choice == "🥗 Yemek & Otomatik Makro":
         else:
             with st.spinner("Yapay zeka besin değerlerini ve makroları çıkartıyor..."):
                 try:
-                    # Yapay zekaya sadece JSON vermesi için kesin talimat geçiyoruz
                     macro_prompt = f"""
                     Kullanıcı şunu yedi: "{user_food_input}"
                     Bu yemeğin/öğünün kalori ve makro değerlerini (karbonhidrat, protein, yağ) profesyonel bir fitness veritabanı hassasiyetinde tahmin et.
@@ -233,4 +232,102 @@ elif choice == "🥗 Yemek & Otomatik Makro":
                     {{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "summary": "Kısa yemek adı veya özeti"}}
                     """
                     response = model.generate_content(macro_prompt)
-                    clean_text = response.text.strip().replace("```json", "").replace("
+                    # Görseldeki tırnak hatasını bu temizleme mantığıyla kökten çözdük kanka:
+                    clean_text = response.text.strip()
+                    if clean_text.startswith("```"):
+                        clean_text = clean_text.split("\n", 1)[1]
+                    if clean_text.endswith("```"):
+                        clean_text = clean_text.rsplit("\n", 1)[0]
+                    clean_text = clean_text.strip()
+                    
+                    data = json.loads(clean_text)
+                    
+                    conn = sqlite3.connect('fitness_tracker.db')
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT INTO nutrition (date, food_name, calories, protein, carbs, fat) 
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (today, data["summary"], data["calories"], data["protein"], data["carbs"], data["fat"]))
+                    conn.commit()
+                    conn.close()
+                    
+                    st.success(f"✔️ Başarıyla İşlendi: **{data['summary']}**")
+                    st.markdown(f"""
+                    - **Tahmini Kalori:** {data['calories']:.0f} kcal
+                    - **Protein:** {data['protein']:.1f} g
+                    - **Karbonhidrat:** {data['carbs']:.1f} g
+                    - **Yağ:** {data['fat']:.1f} g
+                    """)
+                    st.info("Değerler doğrudan bugünün toplam gelişim paneline eklendi!")
+                except Exception as e:
+                    st.error(f"Yemek çözümlenirken bir hata oluştu: {e}. Lütfen girdiyi net yazıp tekrar dene.")
+
+# ==================== 4. SAYFA: SUPPLEMENTLER ====================
+elif choice == "💊 Supplement Günlüğü":
+    st.header("💊 Gelişmiş Supplement Deposu")
+    
+    supp_list = {
+        "Creatine Monohydrate": "Örn: 5 gram veya 1 ölçek",
+        "Whey Protein": "Örn: 30 gram veya 1 ölçek",
+        "ZMA": "Örn: 1 adet veya 2 kapsül",
+        "Magnezyum Bisglisinat": "Örn: 1 tablet veya 200 mg",
+        "Cream of Rice": "Örn: 50 gram",
+        "D3 Vitamini": "Örn: 1 damla veya 2000 IU",
+        "Omega-3 Balık Yağı": "Örn: 1 kapsül veya 1000 mg",
+        "Pre-Workout": "Örn: 1 ölçek veya 10 gram",
+        "Elektrolit Tozu": "Örn: 1 paket veya 5 gram",
+        "Milk Thistle (Deve Dikeni - Karaciğer Destek)": "Örn: 1 kapsül"
+    }
+    
+    conn = sqlite3.connect('fitness_tracker.db')
+    cursor = conn.cursor()
+    
+    for s_name, placeholder in supp_list.items():
+        st.markdown(f"**🔹 {s_name}**")
+        col1, col2 = st.columns([1, 3])
+        
+        cursor.execute("SELECT taken, amount FROM supplements_v3 WHERE date=? AND supp_name=?", (today, s_name))
+        row = cursor.fetchone()
+        
+        db_taken = row[0] if row else 0
+        db_amount = row[1] if row else ""
+        
+        is_taken = col1.checkbox("Aldım", value=True if db_taken == 1 else False, key=f"check_{s_name}")
+        amount_input = col2.text_input("Ne kadar aldın?", value=db_amount, placeholder=placeholder, key=f"text_{s_name}")
+        
+        new_taken = 1 if is_taken else 0
+        
+        if row:
+            cursor.execute("UPDATE supplements_v3 SET taken=?, amount=? WHERE date=? AND supp_name=?", (new_taken, amount_input, today, s_name))
+        else:
+            cursor.execute("INSERT INTO supplements_v3 (date, supp_name, amount, taken) VALUES (?, ?, ?, ?)", (today, s_name, amount_input, new_taken))
+            
+    conn.commit()
+    conn.close()
+    st.success("Supplement deposu güncellendi kanka!")
+
+# ==================== DİĞER SAYFALAR ====================
+elif choice == "🏋️‍♂️ PPL Antrenman Günlüğü":
+    st.header("🏋️‍♂️ Bugün Demirleri Nasıl Ağlattın?")
+    ppl_type = st.selectbox("Bugün Hangi Gün?", ["Push (İtiş)", "Pull (Çekiş)", "Legs (Bacak)"])
+    ex_name = st.text_input("Hareket Adı")
+    sets_input = st.text_input("Setler ve Tekrarlar (Örn: 4x12 60kg)")
+    if st.button("Hareketi Veritabanına İşle"):
+        conn = sqlite3.connect('fitness_tracker.db')
+        cursor = conn.cursor()  # Çakışan hatalı cursor düzeltildi kanka
+        cursor.execute("INSERT INTO workouts (date, routine_type, exercise_name, sets) VALUES (?, ?, ?, ?)", (today, ppl_type, ex_name, sets_input))
+        conn.commit()
+        conn.close()
+        st.success(f"{ex_name} koçun defterine kaydedildi.")
+
+elif choice == "📉 Haftalık Form & Kilo":
+    st.header("📉 Kilo ve Form Kontrolü")
+    current_w = st.number_input("Bugünkü Kilon (kg):", min_value=0.0, value=current_weight, step=0.05)
+    note = st.text_area("Ekstra Notun:")
+    if st.button("Kaydet"):
+        conn = sqlite3.connect('fitness_tracker.db')
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO progress (date, weight, note) VALUES (?, ?, ?)", (today, current_w, note))
+        conn.commit()
+        conn.close()
+        st.success("Kilo kaydedildi!")
