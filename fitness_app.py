@@ -27,9 +27,10 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT, message TEXT
         )
     ''')
+    # Supplement tablosunu adet/gramaj tutacak şekilde güncelliyoruz
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS supplements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, supp_name TEXT, taken INTEGER
+            id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, supp_name TEXT, amount TEXT, taken INTEGER
         )
     ''')
     conn.commit()
@@ -64,16 +65,16 @@ cursor.execute("SELECT SUM(calories), SUM(protein), SUM(carbs), SUM(fat) FROM nu
 totals = cursor.fetchone()
 cursor.execute("SELECT exercise_name, sets FROM workouts WHERE date=?", (today,))
 today_workouts = cursor.fetchall()
-cursor.execute("SELECT supp_name FROM supplements WHERE date=? AND taken=1", (today,))
+# Sadece alınan supplementleri ve miktarlarını çekiyoruz
+cursor.execute("SELECT supp_name, amount FROM supplements WHERE date=? AND taken=1", (today,))
 taken_supps = cursor.fetchall()
 conn.close()
 
 cal, prot, carb, fat = (totals[0] or 0), (totals[1] or 0), (totals[2] or 0), (totals[3] or 0)
 workout_str = ", ".join([f"{w[0]} ({w[1]})" for w in today_workouts]) if today_workouts else "Henüz idman girilmedi"
-supp_str = ", ".join([s[0] for s in taken_supps]) if taken_supps else "Henüz supplement alınmadı"
+supp_str = ", ".join([f"{s[0]} ({s[1]})" for s in taken_supps]) if taken_supps else "Henüz supplement alınmadı"
 
-# Matematiksel Hesaplamalar (Arkada çalışan mantık)
-# Bazal Metabolizma ~1750 kcal + Günlük Aktivite/İdman ~600 kcal = Toplam Yakılan ~2350 kcal tahmini
+# Matematiksel Hesaplamalar
 tahmini_yakilan = 2350
 net_kalori_alimi = cal
 kalori_acigi = tahmini_yakilan - net_kalori_alimi
@@ -81,16 +82,17 @@ tahmini_yag_yakimi_gr = (kalori_acigi / 7.7) if kalori_acigi > 0 else 0
 
 # KOÇUN SİSTEM BACKEND PROMPTI
 system_context = f"""
-Sen kullanıcının 7/24 yanında olan profesyonel, samimi, gerektiğinde sert ama her zaman gaza getiren fitness koçusun (Adın Koç AI, kullanıcıya hep 'kanka' diyorsun).
+Sen kullanıcının 7/24 yanında olan profesyonel, samimi, gerektiğinde sert ama her zaman gaza getiren fitness koçusun. Adın 'Koç AI'. Kullanıcıya hep 'kanka' diyorsun.
 Kullanıcı Profili: Yaş: 17, Boy: 175 cm, Kilo: 79.95 kg. Hedef: Yağ yakarken kas kütlesini korumak/artırmak. Program: PPL.
 
 Bugünkü Mevcut Durum Verileri:
 - Alınan Kalori: {cal:.0f} kcal (Protein: {prot:.1f}g, Karbonhidrat: {carb:.1f}g, Yağ: {fat:.1f}g)
 - Yapılan İdmanlar: {workout_str}
-- Alınan Supplementler: {supp_str}
+- Alınan Supplementler ve Miktarları: {supp_str}
 - Arkada Hesaplanan Tahmini Yağ Yakımı: {tahmini_yag_yakimi_gr:.1f} gram.
 
-Senden istenen: Bu verilere göre kullanıcıya net, nokta atışı bir koçluk raporu veya sohbet cevabı vermen. Eğer karbonhidrat/kalori çok yüksekse 'kanka bugün sınırı aşmışız, hemen idman sonuna 25 dakika tempolu kardiyo ekle' gibi pratik ödevler ver. Supplementleri eksikse (örn: kreatin almadıysa) uyar. Jargona (pump, progressive overload, makro, bulk, kardiyo vb.) hakim bir salon kankası gibi konuş.
+Senden istenen: Bu verilere göre kullanıcıya net, nokta atışı bir koçluk raporu veya sohbet cevabı vermen.
+Supplement miktarlarına (örneğin 50g Cream of Rice, 1 adet ZMA, Pre-Workout vb.) dikkat et. Eğer Pre-Workout alındıysa antrenman odağını yorumla, Magnezyum Bisglisinat ve ZMA alındıysa uyku kalitesini ve kas toparlanmasını öv. Eksik supplement varsa uyar. Jargona (pump, progressive overload, makro, bulk, kardiyo, recovery vb.) hakim bir salon kankası gibi konuş.
 """
 
 # ==================== 1. SAYFA: ÖZET & KOÇUN RAPORU ====================
@@ -112,7 +114,7 @@ if choice == "🔥 Koçun Günlük Raporu & Özet":
     else:
         with st.spinner("Koçun tüm verilerini, idmanını ve supplementlerini analiz ediyor..."):
             try:
-                prompt = "Bütün bugünkü verileri incele ve bana 'Bugünkü Değerlendirmem', 'Bugün Hesapladığım Yağ Yakımı' ve en önemlisi 'Şu An Yapman Gereken Net Ödev/Tavsiye (Kardiyo vb.)' şeklinde maddeler halinde direktiflerini ver."
+                prompt = "Bütün bugünkü verileri incele ve bana 'Bugünkü Değerlendirmem', 'Supplement & Reçete Yorumum' ve en önemlisi 'Şu An Yapman Gereken Net Ödev/Tavsiye (Kardiyo, beslenme, supplement vb.)' şeklinde maddeler halinde direktiflerini ver."
                 response = model.generate_content([system_context, prompt])
                 st.write(response.text)
             except Exception as e:
@@ -181,31 +183,53 @@ elif choice == "🥗 Yemek & Makro Takibi":
         conn.close()
         st.success(f"{f_name} hafızaya alındı kanka!")
 
-# ==================== 4. SAYFA: SUPPLEMENTLER ====================
+# ==================== 4. SAYFA: SUPPLEMENTLER (GÜNCELLENEN KISIM) ====================
 elif choice == "💊 Supplement Günlüğü":
-    st.header("💊 Bugün Hangi Supplementleri Attın?")
-    supps = ["Creatine", "Whey Protein", "ZMA", "Magnesium", "Cream of Rice"]
+    st.header("💊 Gelişmiş Supplement Deposu")
+    st.subheader("Bugün Vücuda Neler Girdi?")
+    
+    # Doğru ve düzeltilmiş isim listesi
+    supp_list = {
+        "Creatine Monohydrate": "Örn: 5 gram veya 1 ölçek",
+        "Whey Protein": "Örn: 30 gram veya 1 ölçek",
+        "ZMA": "Örn: 1 adet veya 2 kapsül",
+        "Magnezyum Bisglisinat": "Örn: 1 tablet veya 200 mg",
+        "Cream of Rice": "Örn: 50 gram",
+        "D3 Vitamini": "Örn: 1 damla veya 2000 IU",
+        "Omega-3 Balık Yağı": "Örn: 1 kapsül veya 1000 mg",
+        "Pre-Workout": "Örn: 1 ölçek veya 10 gram",
+        "Elektrolit Tozu": "Örn: 1 paket veya 5 gram",
+        "Milk Thistle (Deve Dikeni - Karaciğer Destek)": "Örn: 1 kapsül"
+    }
     
     conn = sqlite3.connect('fitness_tracker.db')
     cursor = conn.cursor()
     
-    for s in supps:
-        cursor.execute("SELECT id FROM supplements WHERE date=? AND supp_name=?", (today, s))
-        exists = cursor.fetchone()
-        if not exists:
-            cursor.execute("INSERT INTO supplements (date, supp_name, taken) VALUES (?, ?, 0)", (today, s))
-    conn.commit()
-    
-    for s in supps:
-        cursor.execute("SELECT taken FROM supplements WHERE date=? AND supp_name=?", (today, s))
-        status = cursor.fetchone()[0]
-        checked = st.checkbox(s, value=True if status == 1 else False)
-        new_status = 1 if checked else 0
-        cursor.execute("INSERT OR REPLACE INTO supplements (id, date, supp_name, taken) VALUES ((SELECT id FROM supplements WHERE date=? AND supp_name=?), ?, ?, ?)", (today, s, today, s, new_status))
-    
+    for s_name, placeholder in supp_list.items():
+        st.markdown(f"**🔹 {s_name}**")
+        col1, col2 = st.columns([1, 3])
+        
+        # Daha önce kaydedilmiş durumu çek
+        cursor.execute("SELECT taken, amount FROM supplements WHERE date=? AND supp_name=?", (today, s_name))
+        row = cursor.fetchone()
+        
+        db_taken = row[0] if row else 0
+        db_amount = row[1] if row else ""
+        
+        is_taken = col1.checkbox("Aldım", value=True if db_taken == 1 else False, key=f"check_{s_name}")
+        amount_input = col2.text_input("Ne kadar aldın?", value=db_amount, placeholder=placeholder, key=f"text_{s_name}")
+        
+        new_taken = 1 if is_taken else 0
+        
+        # Durumu güncelle veya ekle
+        if row:
+            cursor.execute("UPDATE supplements SET taken=?, amount=? WHERE date=? AND supp_name=?", (new_taken, amount_input, today, s_name))
+        else:
+            cursor.execute("INSERT INTO supplements (date, supp_name, amount, taken) VALUES (?, ?, ?, ?)", (today, s_name, amount_input, new_taken))
+            
     conn.commit()
     conn.close()
-    st.info("İçtiğin supplementleri işaretle, koçun ana sayfada raporunu yazarken bunlara da bakacak!")
+    st.success("Supplement deposu güncellendi kanka! Koçun ana sayfada hepsini gramı gramına okuyor.")
 
 # ==================== DİĞER SAYFALAR ====================
 elif choice == "🏋️‍♂️ PPL Antrenman Günlüğü":
