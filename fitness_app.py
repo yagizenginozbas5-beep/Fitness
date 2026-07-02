@@ -3,7 +3,7 @@ import sqlite3
 import datetime
 import zoneinfo
 import google.generativeai as genai
-import json
+import json  # Makro dönüşümü için ekledik kanka
 
 # --- VERİTABANI AYARLARI ---
 def init_db():
@@ -34,22 +34,14 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, supp_name TEXT, amount TEXT, taken INTEGER
         )
     ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS cardio (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, cardio_type TEXT, duration_min INTEGER, intensity TEXT
-        )
-    ''')
     conn.commit()
     conn.close()
 
 init_db()
 
-# --- GEMINI API AYARI (SECRETS OTOMASYONU) ---
-if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
-else:
-    st.sidebar.title("🔑 Yapay Zeka Ayarı")
-    api_key = st.sidebar.text_input("Gemini API Key Girin:", type="password")
+# --- GEMINI API AYARI ---
+st.sidebar.title("🔑 Yapay Zeka Ayarı")
+api_key = st.sidebar.text_input("Gemini API Key Girin:", type="password")
 
 def get_gemini_model():
     if not api_key:
@@ -82,38 +74,14 @@ today_workouts = cursor.fetchall()
 cursor.execute("SELECT supp_name, amount FROM supplements_v3 WHERE date=? AND taken=1", (today,))
 taken_supps = cursor.fetchall()
 
-# Kardiyo Verilerini Çekme
-cursor.execute("SELECT cardio_type, duration_min, intensity FROM cardio WHERE date=?", (today,))
-today_cardio = cursor.fetchall()
-
-# Gelişim Kıyaslama Motoru İçin Veri Çekme
-cursor.execute("SELECT weight, date FROM progress ORDER BY id ASC LIMIT 1")
-first_weight_row = cursor.fetchone()
-
-cursor.execute("SELECT weight, date FROM progress ORDER BY id DESC LIMIT 1")
+cursor.execute("SELECT weight FROM progress ORDER BY id DESC LIMIT 1")
 last_weight_row = cursor.fetchone()
+current_weight = last_weight_row[0] if last_weight_row else 79.95
 conn.close()
-
-# Başlangıç ve Güncel Kilo Atamaları
-baslangic_kilosu = 79.95
-baslangic_tarihi = "2026-06-20"
-
-if first_weight_row:
-    baslangic_kilosu = first_weight_row[0]
-    baslangic_tarihi = first_weight_row[1]
-
-current_weight = last_weight_row[0] if last_weight_row else baslangic_kilosu
-current_weight_date = last_weight_row[1] if last_weight_row else today
-
-# Değişim Analitiği Hesaplamaları
-toplam_kilo_degisimi = current_weight - baslangic_kilosu
-baslangic_yag_orani = 21.5
-tahmini_mevcut_yag_orani = baslangic_yag_orani - ((baslangic_kilosu - current_weight) * 0.7)
 
 cal, prot, carb, fat = (totals[0] or 0), (totals[1] or 0), (totals[2] or 0), (totals[3] or 0)
 workout_str = ", ".join([f"{w[0]} ({w[1]})" for w in today_workouts]) if today_workouts else "Henüz idman girilmedi"
 supp_str = ", ".join([f"{s[0]} ({s[1]})" for s in taken_supps]) if taken_supps else "Henüz supplement alınmadı"
-cardio_str = ", ".join([f"{c[0]} ({c[1]} dk - {c[2]})" for c in today_cardio]) if today_cardio else "Henüz kardiyo girilmedi"
 
 # --- GELİŞMİŞ ANALİTİK MOTORU ---
 bmr = 66.47 + (13.75 * current_weight) + (5.00 * 175) - (6.75 * 17)
@@ -121,6 +89,7 @@ tahmini_yakilan = bmr * 1.55
 
 kalori_acigi = tahmini_yakilan - cal if cal > 0 else 0
 tahmini_yag_yakimi_gr = (kalori_acigi / 7.7) if kalori_acigi > 0 else 0
+tahmini_mevcut_yag_orani = 21.5 - ((cal / 5000) if cal > 0 else 0)
 
 hedef_yag_orani = 14.0
 yakilmasi_gereken_yag_kg = (current_weight * (tahmini_mevcut_yag_orani - hedef_yag_orani)) / 100
@@ -143,53 +112,27 @@ Sen kullanıcının kişisel, profesyonel, son derece gerçekçi ve analitik fit
 
 Kullanıcı Profili: Yaş: 17, Boy: 175 cm, Güncel Kilo: {current_weight:.2f} kg. Program: PPL (Haftada 6 Gün).
 
-Gelişim ve Kamp Kıyaslama Analizi:
-- Başlangıç Kilon ({baslangic_tarihi}): {baslangic_kilosu:.2f} kg
-- Güncel Kilon ({current_weight_date}): {current_weight:.2f} kg
-- Toplam Değişim: {toplam_kilo_degisimi:.2f} kg
-- Tahmini Başlangıç Yağ Oranın: %{baslangic_yag_orani:.1f}
-- Tahmini Güncel Yağ Oranın: %{tahmini_mevcut_yag_orani:.1f}
-
 Bugünkü Gerçek Zamanlı Veriler:
 - Alınan Kalori: {cal:.0f} kcal (Protein: {prot:.1f}g, Karbonhidrat: {carb:.1f}g, Yağ: {fat:.1f}g)
 - Yapılan İdmanlar: {workout_str}
-- Yapılan Kardiyolar: {cardio_str}
 - Alınan Supplementler ve Miktarları: {supp_str}
 
 Arka Plan Analiz Motoru Sonuçları:
 - Günlük Bazal Metabolizma + İdman Harcaması (TDEE): {tahmini_yakilan:.0f} kcal
 - Şu Anki Net Kalori Açığı: {kalori_acigi:.0f} kcal
 - Bugün Yakılan Net Yağ: {tahmini_yag_yakimi_gr:.1f} gram
+- Tahmini Mevcut Yağ Oranı: %{tahmini_mevcut_yag_orani:.1f}
 - Gelecek Projeksiyonu: {projeksiyon_str}
 
 Senden Beklenen Sert ve Gerçekçi Koçluk Kuralları:
 1. Zamanın farkında ol! Saat şu an Türkiye saati ile tam olarak {current_time}. Eğer saat öğlen veya akşamsa ve hala 'Henüz idman girilmedi' yazıyorsa, hemen "Saat {current_time} oldu, idmana ne zaman gidiyorsun? Bugün PPL'in hangi günündesin, planda ne var?" diye hesap sor.
-2. Analiz yaparken mutlaka başlangıç verileri ile şimdiki verileri kıyasla! Gelişimi yüzüne vur ya da gidişat kötüyse uyar.
-3. Bugün yapılan kardiyo bilgisini kontrol et. Eğer kullanıcı çok kalori aldıysa veya kalori açığı azsa ve 'Henüz kardiyo girilmedi' yazıyorsa, kesinlikle sert bir şekilde kardiyo yapmasını söyle, uyar.
-4. Kesinlikle boş yere övme. Protein eksikse "Bu proteinle kas kütleni koruyamazsın" de. Kalori fazlaysa ya da açık azsa "Böyle giderse yağ yakamazsın, hedefin hayal olur" de. 
-5. Yağ oranı ve gelecek projeksiyonunu analiz et. Kullanıcıya net olarak: "Şu anki durumuna göre yağ oranın tahmini %{tahmini_mevcut_yag_orani:.1f}. Eğer bu disiplini bozmazsan şu günde %14'e düşeceksin, ama bozduğun an takvim patlar" şeklinde matematiksel konuş.
-6. Supplement miktarlarına (örneğin 50g Cream of Rice, ZMA vb.) dikkat et. Alınmadıysa eksikliğini yüzüne vur.
+2. Kesinlikle boş yere övme. Protein eksikse "Bu proteinle kas kütleni koruyamazsın" de. Kalori fazlaysa ya da açık azsa "Böyle giderse yağ yakamazsın, hedefin hayal olur" de. 
+3. Yağ oranı ve gelecek projeksiyonunu analiz et. Kullanıcıya net olarak: "Şu anki durumuna göre yağ oranın tahmini %{tahmini_mevcut_yag_orani:.1f}. Eğer bu disiplini bozmazsan şu günde %14'e düşeceksin, ama bozduğun an takvim patlar" şeklinde matematiksel konuş.
+4. Supplement miktarlarına (örneğin 50g Cream of Rice, ZMA vb.) dikkat et. Alınmadıysa eksikliğini yüzüne vur.
 """
 
 # ==================== 1. SAYFA: ÖZET & KOÇUN RAPORU ====================
-# 🔥 Koçun Günlük Raporu & Özet sayfası için:
 if choice == "🔥 Koçun Günlük Raporu & Özet":
-    # ... (metriklerin burada kalsın) ...
-
-    # ANALİZİ BUTONA BAĞLIYORUZ:
-    if st.button("Koçtan Yeni Analiz İste 🧠"):
-        model = get_gemini_model()
-        if model:
-            with st.spinner("Analiz ediliyor..."):
-                try:
-                    response = model.generate_content([system_context, prompt])
-                    st.session_state["rapor_hafiza"] = response.text
-                except Exception as e:
-                    st.error(f"Hata: {e}")
-    
-    # Raporu butona basınca hafızadan göster:
-    if "rapor_hafiza" in st.session_state:
-        st.write(st.session_state["rapor_hafiza"])
     st.header("📋 Gerçek Zamanlı Analiz Paneli")
     
     col1, col2, col3, col4 = st.columns(4)
@@ -197,13 +140,6 @@ if choice == "🔥 Koçun Günlük Raporu & Özet":
     col2.metric("Protein", f"{prot:.1f} g")
     col3.metric("Tahmini Yağ Oranın", f"%{tahmini_mevcut_yag_orani:.1f}")
     col4.metric("Net Kalori Açığı", f"{kalori_acigi:.0f} kcal")
-
-    st.markdown("---")
-    st.subheader("📉 Kamp Gelişim ve Değişim Kıyaslaması")
-    col_k1, col_k2, col_k3 = st.columns(3)
-    col_k1.metric("Başlangıç Kilon", f"{baslangic_kilosu:.2f} kg", help=f"Kayıt Tarihi: {baslangic_tarihi}")
-    col_k2.metric("Güncel Kilon", f"{current_weight:.2f} kg", help=f"Son Kayıt: {current_weight_date}")
-    col_k3.metric("Toplam Değişim", f"{toplam_kilo_degisimi:.2f} kg", delta=f"{toplam_kilo_degisimi:.2f} kg", delta_color="inverse")
 
     st.markdown("---")
     st.subheader("📊 Matematiksel Projeksiyon")
@@ -219,7 +155,7 @@ if choice == "🔥 Koçun Günlük Raporu & Özet":
     else:
         with st.spinner("Koçun tüm verilerini ve zaman parametrelerini analiz ediyor..."):
             try:
-                prompt = "Mevcut saate, başlangıç/güncel kilo değişimlerine ve bugünkü verilere bakarak bana hiç lafı dolandırmadan; 'Kamp Gelişim / Değişim Değerlendirmesi', 'Zamanlama, İdman ve Kardiyo Kontrolü', 'Yağ Oranı ve Projeksiyon Değerlendirmesi' başlıklarıyla net, sert ve matematiksel bir karne çıkar."
+                prompt = "Mevcut saate ve verilere bakarak bana hiç lafı dolandırmadan; 'Zamanlama ve İdman Kontrolü', 'Yağ Oranı ve Projeksiyon Değerlendirmesi', 'Gözümden Kaçmayan Eksikler' başlıklarıyla net, sert ve matematiksel bir karne çıkar."
                 response = model.generate_content([system_context, prompt])
                 st.write(response.text)
             except Exception as e:
@@ -271,7 +207,7 @@ elif choice == "💬 Koçla Sohbet & Akıl Danışma":
             conn.close()
             st.rerun()
 
-# ==================== 3. SAYFA: BESLENME ====================
+# ==================== 3. SAYFA: BESLENME (YENİLENEN OTOMATİK SİSTEM) ====================
 elif choice == "🥗 Yemek & Otomatik Makro":
     st.header("🥗 Bugün Ne Gömdün?")
     st.subheader("Makroları Sen Değil, Koç Hesaplasın")
@@ -289,6 +225,7 @@ elif choice == "🥗 Yemek & Otomatik Makro":
         else:
             with st.spinner("Yapay zeka besin değerlerini ve makroları çıkartıyor..."):
                 try:
+                    # Yapay zekaya sadece JSON vermesi için kesin talimat geçiyoruz
                     macro_prompt = f"""
                     Kullanıcı şunu yedi: "{user_food_input}"
                     Bu yemeğin/öğünün kalori ve makro değerlerini (karbonhidrat, protein, yağ) profesyonel bir fitness veritabanı hassasiyetinde tahmin et.
@@ -296,12 +233,10 @@ elif choice == "🥗 Yemek & Otomatik Makro":
                     {{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "summary": "Kısa yemek adı veya özeti"}}
                     """
                     response = model.generate_content(macro_prompt)
+                    clean_text = response.text.strip().replace("```json", "").replace("```", "")
                     
-                   # 260. satıra bunu yapıştır:
-                    raw_text = response.text.strip()
-                    clean_text = raw_text.replace("```json", "").replace("```", "").strip()
+                    # JSON verisini parse edip veritabanına atıyoruz
                     data = json.loads(clean_text)
-                    
                     
                     conn = sqlite3.connect('fitness_tracker.db')
                     cursor = conn.cursor()
@@ -367,38 +302,20 @@ elif choice == "💊 Supplement Günlüğü":
     conn.close()
     st.success("Supplement deposu güncellendi kanka!")
 
-# ==================== 5. SAYFA: ANTRENMAN & KARDİYO ====================
+# ==================== DİĞER SAYFALAR ====================
 elif choice == "🏋️‍♂️ PPL Antrenman Günlüğü":
     st.header("🏋️‍♂️ Bugün Demirleri Nasıl Ağlattın?")
-    
-    st.subheader("💪 Ağırlık Antrenmanı Gir")
     ppl_type = st.selectbox("Bugün Hangi Gün?", ["Push (İtiş)", "Pull (Çekiş)", "Legs (Bacak)"])
     ex_name = st.text_input("Hareket Adı")
     sets_input = st.text_input("Setler ve Tekrarlar (Örn: 4x12 60kg)")
     if st.button("Hareketi Veritabanına İşle"):
         conn = sqlite3.connect('fitness_tracker.db')
-        cursor = conn.cursor()
+        cursor = csv_cursor = conn.cursor()
         cursor.execute("INSERT INTO workouts (date, routine_type, exercise_name, sets) VALUES (?, ?, ?, ?)", (today, ppl_type, ex_name, sets_input))
         conn.commit()
         conn.close()
         st.success(f"{ex_name} koçun defterine kaydedildi.")
 
-    st.markdown("---")
-    
-    st.subheader("🏃‍♂️ Kardiyo Ekle")
-    cardio_type = st.selectbox("Kardiyo Tipi", ["Eğimli Yürüyüş (Incline Treadmill)", "Koşu", "Bisiklet", "Merdiven (Stairmaster)", "HIIT Kardiyo"])
-    duration = st.number_input("Kaç Dakika Yaptın?", min_value=1, value=20, step=5)
-    intensity = st.selectbox("Tempo / Yoğunluk", ["Düşük Tempo (LISS)", "Orta Tempo", "Yüksek Tempo (HIIT)"])
-    
-    if st.button("Kardiyoyu Kaydet"):
-        conn = sqlite3.connect('fitness_tracker.db')
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO cardio (date, cardio_type, duration_min, intensity) VALUES (?, ?, ?, ?)", (today, cardio_type, duration, intensity))
-        conn.commit()
-        conn.close()
-        st.success(f"{duration} dakikalık {cardio_type} koçun defterine işlendi!")
-
-# ==================== 6. SAYFA: KİLO KAYDI ====================
 elif choice == "📉 Haftalık Form & Kilo":
     st.header("📉 Kilo ve Form Kontrolü")
     current_w = st.number_input("Bugünkü Kilon (kg):", min_value=0.0, value=current_weight, step=0.05)
