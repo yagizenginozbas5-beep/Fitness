@@ -255,7 +255,6 @@ elif choice == "💬 Koçla Sohbet & Akıl Danışma":
             st.rerun()
 
 # ==================== 3. SAYFA: BESLENME ====================
-# ==================== 3. SAYFA: BESLENME ====================
 elif choice == "🥗 Yemek & Otomatik Makro":
     st.header("🥗 Bugün Ne Gömdün?")
     st.subheader("Makroları Sen Değil, Koç Hesaplasın")
@@ -267,36 +266,48 @@ elif choice == "🥗 Yemek & Otomatik Makro":
     
     if st.button("Öğünü Çözümle ve Sisteme İşle"):
         if not model:
-            st.error("Kanka sol menüden Gemini API Key girmen lazım!")
+            st.error("Kanka sol menüden Gemini API Key girmen lazım, yoksa yapay zeka yemeği hesaplayamaz!")
         elif not user_food_input.strip():
-            st.warning("Lütfen boş bırakma.")
+            st.warning("Lütfen boş bırakma, ne yediğini yaz.")
         else:
-            with st.spinner("Hesaplanıyor..."):
+            with st.spinner("Yapay zeka besin değerlerini ve makroları çıkartıyor..."):
                 try:
-                    macro_prompt = f"Kullanıcı şunu yedi: '{user_food_input}'. Sadece JSON formatında: {{'calories': 0.0, 'protein': 0.0, 'carbs': 0.0, 'fat': 0.0, 'summary': 'ozet'}}"
+                    macro_prompt = f"""
+                    Kullanıcı şunu yedi: "{user_food_input}"
+                    Bu yemeğin/öğünün kalori ve makro değerlerini (karbonhidrat, protein, yağ) profesyonel bir fitness veritabanı hassasiyetinde tahmin et.
+                    Sadece ve sadece aşağıdaki JSON formatında çıktı ver, başka hiçbir yazı, açıklama veya markdown kesmesi ekleme:
+                    {{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "summary": "Kısa yemek adı veya özeti"}}
+                    """
                     response = model.generate_content(macro_prompt)
                     
-    
-            
-            # HATA VERMEYEN TEMİZLEME YÖNTEMİ
-            clean_text = response.text.replace("```json", "").replace("```", "").strip()
-            data = json.loads(clean_text)
-            
-            # ... veritabanına ekleme kodların ...
-        except Exception as e:
-            st.error(f"Koçun kafası karıştı, tekrar dene. Hata: {e}")
+                    clean_text = response.text.strip()
+                    if clean_text.startswith("```"):
+                        clean_text = clean_text.split("\n", 1)[1]
+                    if clean_text.endswith("```"):
+                        clean_text = clean_text.rsplit("\n", 1)[0]
+                    clean_text = clean_text.strip()
+                    
+                    data = json.loads(clean_text)
                     
                     conn = sqlite3.connect('fitness_tracker.db')
                     cursor = conn.cursor()
-                    cursor.execute("INSERT INTO nutrition (date, food_name, calories, protein, carbs, fat) VALUES (?, ?, ?, ?, ?, ?)", 
-                                   (today, data["summary"], data["calories"], data["protein"], data["carbs"], data["fat"]))
+                    cursor.execute("""
+                        INSERT INTO nutrition (date, food_name, calories, protein, carbs, fat) 
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (today, data["summary"], data["calories"], data["protein"], data["carbs"], data["fat"]))
                     conn.commit()
                     conn.close()
                     
-                    st.success(f"✔️ İşlendi: {data['summary']}")
-                    st.json(data)
+                    st.success(f"✔️ Başarıyla İşlendi: **{data['summary']}**")
+                    st.markdown(f"""
+                    - **Tahmini Kalori:** {data['calories']:.0f} kcal
+                    - **Protein:** {data['protein']:.1f} g
+                    - **Karbonhidrat:** {data['carbs']:.1f} g
+                    - **Yağ:** {data['fat']:.1f} g
+                    """)
+                    st.info("Değerler doğrudan bugünün toplam gelişim paneline eklendi!")
                 except Exception as e:
-                    st.error("Koçun kafası karıştı, girdiyi daha net yaz.")
+                    st.error(f"Yemek çözümlenirken bir hata oluştu: {e}. Lütfen girdiyi net yazıp tekrar dene.")
 
 # ==================== 4. SAYFA: SUPPLEMENTLER ====================
 elif choice == "💊 Supplement Günlüğü":
