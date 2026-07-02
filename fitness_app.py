@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 import datetime
+import zoneinfo  # Saat dilimi ayarı için ekledik kanka
 import google.generativeai as genai
 
 # --- VERİTABANI AYARLARI ---
@@ -56,8 +57,9 @@ st.info("📋 **Profil Özeti:** Yaş: 17 | Boy: 175 cm | Güncel Kilo: 79.95 kg
 menu = ["🔥 Koçun Günlük Raporu & Özet", "💬 Koçla Sohbet & Akıl Danışma", "🥗 Yemek & Makro Takibi", "💊 Supplement Günlüğü", "🏋️‍♂️ PPL Antrenman Günlüğü", "📉 Haftalık Form & Kilo"]
 choice = st.sidebar.selectbox("Gitmek İstediğin Sayfa", menu)
 
-# Gerçek Zaman ve Tarih Ayarları
-now = datetime.datetime.now()
+# --- TÜRKİYE SAAT AYARI (SORUNU ÇÖZEN KISIM) ---
+tr_timezone = zoneinfo.ZoneInfo("Europe/Istanbul")
+now = datetime.datetime.now(tr_timezone)
 today = now.strftime("%Y-%m-%d")
 current_time = now.strftime("%H:%M")
 
@@ -81,20 +83,14 @@ cal, prot, carb, fat = (totals[0] or 0), (totals[1] or 0), (totals[2] or 0), (to
 workout_str = ", ".join([f"{w[0]} ({w[1]})" for w in today_workouts]) if today_workouts else "Henüz idman girilmedi"
 supp_str = ", ".join([f"{s[0]} ({s[1]})" for s in taken_supps]) if taken_supps else "Henüz supplement alınmadı"
 
-# --- GELİŞMİŞ ANALİTİK MOTORU (MATEMATİKSEL PROJEKSİYON) ---
-# Temel Metabolizma Hızı (Harris-Benedict - 17 yaş, 175 boy, güncel kilo için)
+# --- GELİŞMİŞ ANALİTİK MOTORU ---
 bmr = 66.47 + (13.75 * current_weight) + (5.00 * 175) - (6.75 * 17)
-tahmini_yakilan = bmr * 1.55  # Haftada 6 gün PPL yapan aktif bir sporcu çarpanı
+tahmini_yakilan = bmr * 1.55
 
 kalori_acigi = tahmini_yakilan - cal if cal > 0 else 0
 tahmini_yag_yakimi_gr = (kalori_acigi / 7.7) if kalori_acigi > 0 else 0
+tahmini_mevcut_yag_orani = 21.5 - ((cal / 5000) if cal > 0 else 0)
 
-# Yağ Oranı Tahmini (Dinamik Hesaplama)
-# 175 cm boy ve ~80 kg aktif sporcu için tahmini başlangıç yağ oranı %21-22 baremidir.
-# Her 7700 kcal açık, 1 kg saf yağ demektir. Bu da yağ oranını yaklaşık %1.25 düşürür.
-tahmini_mevcut_yag_orani = 21.5 - ((cal / 5000) if cal > 0 else 0)  # Değişimi izlemek için simülasyon
-
-# Hedef Gün Hesaplama (%14 yağ oranına düşmek için gereken süre)
 hedef_yag_orani = 14.0
 yakilmasi_gereken_yag_kg = (current_weight * (tahmini_mevcut_yag_orani - hedef_yag_orani)) / 100
 toplam_gereken_kalori_acigi = yakilmasi_gereken_yag_kg * 7700
@@ -104,13 +100,13 @@ if kalori_acigi > 100:
     hedef_tarih = (now + datetime.timedelta(days=gereken_gun_sayisi)).strftime("%d %B %Y")
     projeksiyon_str = f"Eğer her gün mevcut kalori açığını ({kalori_acigi:.0f} kcal) korursan, tam {gereken_gun_sayisi} gün sonra, yani {hedef_tarih} tarihinde %14 yağ oranına ve tahmini {current_weight - yakilmasi_gereken_yag_kg:.1f} kiloya düşeceksin."
 else:
-    projeksiyon_str = "Mevcut kalori alımınla yağ yakımı hedefi hesaplanamıyor. Kalori açığı yaratmadığın sürece yağ oranın düşmeyecek, süreç tıkanacak."
+    projeksiyon_str = "Mevcut kalori alımınla yağ yakımı hedefi hesaplanamıyor. Kalori açığı yaratmadığın sürece yağ oranın düşmeyecek."
 
-# KOÇUN SİSTEM BACKEND PROMPTI (YENİ AKILLI SÜRÜM)
+# KOÇUN SİSTEM BACKEND PROMPTI
 system_context = f"""
 Sen kullanıcının kişisel, profesyonel, son derece gerçekçi ve analitik fitness koçusun. Adın 'Koç AI'. Kullanıcıya 'kanka' diyorsun ama boş övgüler, sahte motivasyon cümleleri ASLA kurmuyorsun. Tamamen verilerle, sert gerçeklerle konuşuyorsun. 
 
-Şu anki Zaman ve Tarih Bilgisi:
+Şu anki Zaman ve Tarih Bilgisi (Türkiye Saati):
 - Bugünün Tarihi: {today}
 - Şu Anki Saat: {current_time}
 
@@ -129,7 +125,7 @@ Arka Plan Analiz Motoru Sonuçları:
 - Gelecek Projeksiyonu: {projeksiyon_str}
 
 Senden Beklenen Sert ve Gerçekçi Koçluk Kuralları:
-1. Zamanın farkında ol! Saat şu an {current_time}. Eğer saat öğlen veya akşamsa ve hala 'Henüz idman girilmedi' yazıyorsa, hemen "Saat {current_time} oldu, idmana ne zaman gidiyorsun? Bugün PPL'in hangi günündesin, planda ne var?" diye hesap sor.
+1. Zamanın farkında ol! Saat şu an Türkiye saati ile tam olarak {current_time}. Eğer saat öğlen veya akşamsa ve hala 'Henüz idman girilmedi' yazıyorsa, hemen "Saat {current_time} oldu, idmana ne zaman gidiyorsun? Bugün PPL'in hangi günündesin, planda ne var?" diye hesap sor.
 2. Kesinlikle boş yere övme. Protein eksikse "Bu proteinle kas kütleni koruyamazsın" de. Kalori fazlaysa ya da açık azsa "Böyle giderse yağ yakamazsın, hedefin hayal olur" de. 
 3. Yağ oranı ve gelecek projeksiyonunu analiz et. Kullanıcıya net olarak: "Şu anki durumuna göre yağ oranın tahmini %{tahmini_mevcut_yag_orani:.1f}. Eğer bu disiplini bozmazsan şu günde %14'e düşeceksin, ama bozduğun an takvim patlar" şeklinde matematiksel konuş.
 4. Supplement miktarlarına (örneğin 50g Cream of Rice, ZMA vb.) dikkat et. Alınmadıysa eksikliğini yüzüne vur.
@@ -151,7 +147,7 @@ if choice == "🔥 Koçun Günlük Raporu & Özet":
 
     st.markdown("---")
     st.header("🧠 Koç AI'ın Gerçekçi & Net Durum Analizi")
-    st.caption(f"Sistem Saati: {current_time} | Veri Filtreleme Tarihi: {today}")
+    st.caption(f"Sistem Saati (TR): {current_time} | Tarih: {today}")
     
     model = get_gemini_model()
     if not model:
