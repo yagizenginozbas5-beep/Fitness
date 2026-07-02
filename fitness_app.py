@@ -280,14 +280,11 @@ elif choice == "🥗 Yemek & Otomatik Makro":
                     """
                     response = model.generate_content(macro_prompt)
                     
-                    clean_text = response.text.strip()
-                    if clean_text.startswith("```"):
-                        clean_text = clean_text.split("\n", 1)[1]
-                    if clean_text.endswith("```"):
-                        clean_text = clean_text.rsplit("\n", 1)[0]
-                    clean_text = clean_text.strip()
-                    
+                   # 260. satıra bunu yapıştır:
+                    raw_text = response.text.strip()
+                    clean_text = raw_text.replace("```json", "").replace("```", "").strip()
                     data = json.loads(clean_text)
+                    
                     
                     conn = sqlite3.connect('fitness_tracker.db')
                     cursor = conn.cursor()
