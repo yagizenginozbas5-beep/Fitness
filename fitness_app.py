@@ -34,7 +34,6 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, supp_name TEXT, amount TEXT, taken INTEGER
         )
     ''')
-    # Kardiyo geçmişi için yeni tablo
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS cardio (
             id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, cardio_type TEXT, duration_min INTEGER, intensity TEXT
@@ -81,8 +80,11 @@ totals = cursor.fetchone()
 # Bugünkü idman, supplement ve kardiyo
 cursor.execute("SELECT exercise_name, sets FROM workouts WHERE date=?", (today,))
 today_workouts = cursor.fetchall()
+
+# Hata veren kısım burasıydı, tablo ismi supplements_v3 olarak düzeltildi kanka
 cursor.execute("SELECT supp_name, amount FROM supplements_v3 WHERE date=? AND taken=1", (today,))
 taken_supps = cursor.fetchall()
+
 cursor.execute("SELECT cardio_type, duration_min, intensity FROM cardio WHERE date=?", (today,))
 today_cardio = cursor.fetchall()
 
@@ -193,68 +195,4 @@ if choice == "🔥 Koçun Günlük Raporu & Özet":
                 except Exception as e:
                     st.error(f"Hata: {e}")
 
-# ==================== 2. SAYFA: SOHBET ====================
-elif choice == "💬 Koçla Sohbet & Akıl Danışma":
-    st.header("💬 Koç AI ile Canlı Dertleşme & Akıl Odası")
-    st.caption(f"Koç şu an saatin {current_time} olduğunun bilincinde.")
-    model = get_gemini_model()
-    
-    if not model:
-        st.error("API Key gir kanka!")
-    else:
-        conn = sqlite3.connect('fitness_tracker.db')
-        cursor = conn.cursor()
-        cursor.execute("SELECT role, message FROM chat_history ORDER BY id ASC")
-        db_history = cursor.fetchall()
-        conn.close()
-        
-        for role, msg in db_history:
-            with st.chat_message("user" if role == "user" else "assistant"):
-                st.write(msg)
-                
-        user_input = st.chat_input("İdman durumunu, beslenmeni yaz ya da soru sor...")
-        if user_input:
-            with st.chat_message("user"):
-                st.write(user_input)
-            
-            conn = sqlite3.connect('fitness_tracker.db')
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO chat_history (role, message) VALUES (?, ?)", ("user", user_input))
-            conn.commit()
-            
-            chat_session_messages = [{"role": "user", "parts": [system_context]}]
-            for r, m in db_history:
-                chat_session_messages.append({"role": "user" if r == "user" else "model", "parts": [m]})
-            chat_session_messages.append({"role": "user", "parts": [user_input]})
-            
-            with st.chat_message("assistant"):
-                try:
-                    response = model.generate_content(chat_session_messages)
-                    reply = response.text
-                    st.write(reply)
-                    cursor.execute("INSERT INTO chat_history (role, message) VALUES (?, ?)", ("assistant", reply))
-                    conn.commit()
-                except Exception as e:
-                    st.error(f"Hata: {e}")
-            conn.close()
-            st.rerun()
-
-# ==================== 3. SAYFA: BESLENME ====================
-elif choice == "🥗 Yemek & Otomatik Makro":
-    st.header("🥗 Bugün Ne Gömdün?")
-    st.subheader("Makroları Sen Değil, Koç Hesaplasın")
-    
-    user_food_input = st.text_area("Ne yediğini gramajıyla veya porsiyonuyla serbestçe yaz kanka:", placeholder="Örn: 300 gram pirinç pilavı ve 200 gram tavuk göğsü")
-    model = get_gemini_model()
-    
-    if st.button("Öğünü Çözümle ve Sisteme İşle"):
-        if not model:
-            st.error("API Key gir kanka!")
-        elif not user_food_input.strip():
-            st.warning("Lütfen boş bırakma.")
-        else:
-            with st.spinner("Hesaplanıyor..."):
-                try:
-                    macro_prompt = f"""Kullanıcı şunu yedi: "{user_food_input}"\nSadece şu JSON formatında çıktı ver:\n{{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "summary": "Özet"}}"""
-                    response = model.generate_content(macro_prompt)
-                    clean_text = response.text.strip().replace("```json", "").replace("
+# =================
