@@ -40,8 +40,7 @@ def init_db():
 init_db()
 
 # --- GEMINI API AYARI ---
-st.sidebar.title("🔑 Yapay Zeka Ayarı")
-api_key = st.sidebar.text_input("Gemini API Key Girin:", type="password")
+
 
 def get_gemini_model():
     # Streamlit Secrets'tan anahtarı otomatik çeker
